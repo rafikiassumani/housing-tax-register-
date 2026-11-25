@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Housing Tax Register</title>
+<style>
+* { box-sizing: border-box }
+body { margin: 0; background: #eef3f1; color: #162d29; font: 16px system-ui, sans-serif }
+header { background: #123c35; color: white; padding: 28px max(20px, calc((100% - 1100px)/2)) }
+h1, h2, p { margin: 0 }
+main { max-width: 1140px; padding: 24px 20px; margin: auto; display: grid; gap: 20px }
+section, .metric { background: white; border: 1px solid #d4e0dc; border-radius: 12px; padding: 20px }
+.metrics, .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px }
+.metric strong { display: block; margin-top: 6px; font-size: 1.55rem }
+form, .search, .scroll { margin-top: 16px }
+label { display: grid; gap: 6px; font-weight: 600; font-size: .9rem }
+input, button { font: inherit; padding: 9px 11px; border-radius: 6px }
+input { min-width: 0; width: 100%; border: 1px solid #819993 }
+button { background: #145b4e; color: white; border: 0; cursor: pointer }
+button:disabled { opacity: .6; cursor: wait }
+form > button { margin-top: 12px }
+.search { max-width: 340px }
+.scroll { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; text-align: left }
+th, td { padding: 12px; border-bottom: 1px solid #e1e8e5; white-space: nowrap }
+th { background: #f1f6f4 }
+.notice { padding: 10px 12px; background: #dcebe6; border-radius: 6px }
+.error { background: #ffebe5; color: #752918 }
+.payment { display: flex; gap: 8px; align-items: center; margin: 0 }
+.payment input { width: 105px }
+.payment button { margin: 0 }
+</style>
+</head>
+<body>
+<header><h1>Housing Tax Register</h1></header>
+<main id="root"></main>
+<script type="module">
+import React, {useEffect, useState} from "https://esm.sh/react@19.1.1";
+import {createRoot} from "https://esm.sh/react-dom@19.1.1/client?deps=react@19.1.1";
+
+const h = React.createElement;
+const usd = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD"});
+const money = cents => usd.format(cents / 100);
+const hundredths = value => Math.round(Number(value) * 100);
+const decimal = {type: "number", step: "0.01"};
+const field = (label, name, options) =>
+  h("label", {key: name}, label, h("input", {name, required: true, ...options}));
+
+async function request(path, data) {
+  const response = await fetch(path, data === undefined ? undefined : {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) throw new Error((await response.text()).trim());
+  return response.json();
+}
+
+function App() {
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    request("/api/assessments").then(setItems)
+      .catch(error => setNotice({error: true, text: error.message}))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function submit(event, action, message) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const saved = await action(new FormData(form));
+      setItems(current => current.some(item => item.id === saved.id)
+        ? current.map(item => item.id === saved.id ? saved : item)
+        : [...current, saved]);
+      form.reset();
+      setNotice({text: message});
+    } catch (error) {
+      setNotice({error: true, text: error.message});
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const assessed = items.reduce((sum, item) => sum + item.taxCents, 0);
+  const collected = items.reduce((sum, item) => sum + item.paidCents, 0);
+  const metrics = [["Tax assessed", assessed], ["Collected", collected], ["Outstanding", assessed - collected]];
+  const query = search.trim().toLowerCase();
+  const visible = items.filter(item =>
+    [item.parcel, item.address, item.year].join(" ").toLowerCase().includes(query));
+  const headings = ["Parcel", "Address", "Year", "Tax", "Paid", "Balance", "Payment"];
+
+  const rows = visible.map(item => {
+    const balance = item.taxCents - item.paidCents;
+    const payment = balance === 0 ? "Settled" : h("form", {
+      className: "payment",
+      onSubmit: event => submit(event, data => request("/api/payments", {
+        id: item.id, cents: hundredths(data.get("amount"))
+      }), "Payment recorded.")
+    },
+    h("input", {...decimal, required: true, name: "amount", min: "0.01",
+      max: (balance / 100).toFixed(2), placeholder: "0.00",
+      "aria-label": "Payment amount for " + item.parcel + ", " + item.year}),
+    h("button", {disabled: busy}, "Record"));
+    const cells = [item.parcel, item.address, item.year, money(item.taxCents),
+      money(item.paidCents), money(balance), payment];
+    return h("tr", {key: item.id}, cells.map((value, index) =>
+      h("td", {key: headings[index]}, value)));
+  });
+
+  const emptyRow = h("tr", null, h("td", {colSpan: headings.length},
+    loading ? "Loading assessments…" : "No matching assessments."));
+
+  return h(React.Fragment, null,
+    h("div", {className: "metrics"}, metrics.map(([label, value]) =>
+      h("div", {className: "metric", key: label}, label,
+        h("strong", null, loading ? "…" : money(value))))),
+    notice && h("p", {
+      role: notice.error ? "alert" : "status",
+      className: notice.error ? "notice error" : "notice"
+    }, notice.text),
+    h("section", null,
+      h("h2", null, "Add assessment"),
+      h("form", {onSubmit: event => submit(event, data => request("/api/assessments", {
+        parcel: data.get("parcel"), address: data.get("address"), year: Number(data.get("year")),
+        valueCents: hundredths(data.get("value")), rateBP: hundredths(data.get("rate"))
+      }), "Assessment saved.")},
+      h("div", {className: "fields"},
+        field("Parcel ID", "parcel", {maxLength: 80}),
+        field("Property address", "address", {maxLength: 200}),
+        field("Tax year", "year", {type: "number", min: 1900, max: 2200,
+          defaultValue: new Date().getFullYear()}),
+        field("Assessed value ($)", "value", {...decimal, min: "0.01", max: "1000000000"}),
+        field("Tax rate (%)", "rate", {...decimal, min: "0", max: "100"})),
+      h("button", {disabled: busy || loading}, "Add assessment"))),
+    h("section", null,
+      h("h2", null, "Property assessments"),
+      h("label", {className: "search"}, "Search parcel, address, or year",
+        h("input", {type: "search", value: search, onChange: event => setSearch(event.target.value)})),
+      h("div", {className: "scroll"}, h("table", null,
+        h("thead", null, h("tr", null, headings.map(label =>
+          h("th", {key: label, scope: "col"}, label)))),
+        h("tbody", null, rows.length ? rows : emptyRow)))));
+}
+
+createRoot(document.getElementById("root")).render(h(App));
+</script>
+</body>
+</html>
