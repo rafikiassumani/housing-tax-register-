@@ -82,8 +82,46 @@ const field = (label, name, options) =>
 
 const storageKey = "housing-tax-register-demo-v1";
 
+function demoAssessments() {
+  const year = new Date().getFullYear();
+  const samples = [
+    ["100 Alder Way", 0, 245000, 115, 0],
+    ["214 Birch Lane", 0, 312000, 115, 50],
+    ["38 Cedar Court", 0, 185000, 105, 100],
+    ["502 Dogwood Drive", 0, 428000, 120, 25],
+    ["76 Elm Place", 0, 279000, 115, 100],
+    ["19 Fir Terrace", 0, 206000, 105, 0],
+    ["610 Hawthorn Avenue", 0, 519000, 120, 75],
+    ["84 Juniper Road", 0, 356000, 115, 50],
+    ["127 Laurel Street", 0, 298000, 105, 0],
+    ["360 Maple Avenue", 0, 390000, 115, 100],
+    ["45 Oak Crescent", 0, 230000, 105, 25],
+    ["921 Pine Boulevard", 0, 596000, 120, 0],
+    ["12 Rowan Close", 1, 198000, 105, 100],
+    ["62 Spruce Lane", 1, 254000, 115, 75],
+    ["340 Willow Way", 1, 335000, 115, 100],
+    ["708 Yew Street", 1, 462000, 120, 50],
+    ["100 Alder Way", 1, 235000, 110, 100, 1],
+    ["214 Birch Lane", 1, 300000, 110, 100, 2]
+  ];
+
+  return samples.map(([address, yearOffset, value, rateBP, paidPercent, parcelNumber], index) => {
+    const parcel = "DEMO-" + String(parcelNumber ?? index + 1).padStart(3, "0");
+    const taxYear = year - yearOffset;
+    const valueCents = value * 100;
+    const taxCents = Math.round(valueCents * rateBP / 10000);
+    return {
+      id: parcel + "-" + taxYear, parcel, address, year: taxYear, valueCents, rateBP,
+      taxCents, paidCents: Math.round(taxCents * paidPercent / 100)
+    };
+  });
+}
+
+
 async function request(path, data) {
-  const records = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+  const stored = localStorage.getItem(storageKey);
+  const records = stored === null ? demoAssessments() : JSON.parse(stored);
+  if (stored === null) localStorage.setItem(storageKey, JSON.stringify(records));
   if (path === "/api/assessments" && data === undefined) return records;
 
   let saved;
