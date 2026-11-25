@@ -30,6 +30,39 @@ th { background: #f1f6f4 }
 .payment { display: flex; gap: 8px; align-items: center; margin: 0 }
 .payment input { width: 105px }
 .payment button { margin: 0 }
+
+:root { color-scheme: light; }
+header h1 { font-size: clamp(1.65rem, 4vw, 2.3rem); line-height: 1.15; }
+header p { margin-top: 8px; color: #dcebe6; }
+main { grid-template-columns: minmax(0, 1fr); }
+section { min-width: 0; }
+h2 { font-size: 1.25rem; }
+input, button { min-height: 44px; }
+:focus-visible { outline: 3px solid #087e6c; outline-offset: 3px; }
+.metric { overflow-wrap: anywhere; }
+th, td { white-space: normal; overflow-wrap: anywhere; }
+td:nth-child(n+4):nth-child(-n+6) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cell-label { display: none; }
+.empty { text-align: center; color: #4c635e; padding: 24px 12px; }
+.notice { position: sticky; top: 8px; z-index: 1; border: 1px solid currentColor; }
+@media (max-width: 760px) {
+  header { padding: 24px 16px; }
+  main { padding: 16px; gap: 16px; }
+  section, .metric { padding: 14px; }
+  .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .metric { font-size: .85rem; }
+  .metric strong { font-size: clamp(1rem, 3.8vw, 1.35rem); }
+  .scroll { overflow: visible; }
+  table, tbody { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tbody { display: grid; gap: 12px; }
+  tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid #d4e0dc; border-radius: 8px; padding: 10px; }
+  tbody td { display: block; padding: 6px; border: 0; }
+  tbody td:nth-child(2), tbody td:last-child { grid-column: 1 / -1; }
+  .cell-label { display: block; margin-bottom: 3px; font-size: .8rem; color: #4c635e; }
+  .payment input { width: auto; max-width: 10rem; }
+}
 </style>
 </head>
 <body>
@@ -136,12 +169,13 @@ function App() {
     h("button", {disabled: busy}, "Record"));
     const cells = [item.parcel, item.address, item.year, money(item.taxCents),
       money(item.paidCents), money(balance), payment];
-    return h("tr", {key: item.id}, cells.map((value, index) =>
-      h("td", {key: headings[index]}, value)));
+    return h("tr", {key: item.id, role: "row"}, cells.map((value, index) =>
+      h("td", {key: headings[index], role: "cell"},
+        h("span", {className: "cell-label", "aria-hidden": true}, headings[index]), value)));
   });
 
-  const emptyRow = h("tr", null, h("td", {colSpan: headings.length},
-    loading ? "Loading assessments…" : "No matching assessments."));
+  const emptyRow = h("tr", {role: "row"}, h("td", {role: "cell", className: "empty", colSpan: headings.length},
+    loading ? "Loading assessments…" : query ? "No assessments match your search." : "No assessments yet. Add one using the form above."));
 
   return h(React.Fragment, null,
     h("div", {className: "metrics"}, metrics.map(([label, value]) =>
@@ -169,10 +203,10 @@ function App() {
       h("h2", null, "Property assessments"),
       h("label", {className: "search"}, "Search parcel, address, or year",
         h("input", {type: "search", value: search, onChange: event => setSearch(event.target.value)})),
-      h("div", {className: "scroll"}, h("table", null,
-        h("thead", null, h("tr", null, headings.map(label =>
-          h("th", {key: label, scope: "col"}, label)))),
-        h("tbody", null, rows.length ? rows : emptyRow)))));
+      h("div", {className: "scroll"}, h("table", {role: "table", "aria-label": "Property assessments"},
+        h("thead", {role: "rowgroup"}, h("tr", {role: "row"}, headings.map(label =>
+          h("th", {key: label, scope: "col", role: "columnheader"}, label)))),
+        h("tbody", {role: "rowgroup"}, rows.length ? rows : emptyRow)))));
 }
 
 createRoot(document.getElementById("root")).render(h(App));
